@@ -1,8 +1,4 @@
-# TP1 — Sécuriser un dépôt Python avec les hooks pre-commit
-
-Arthaud Proust — Projet fil rouge NOVA SERVICES
-
-Environnement : macOS, Python 3.15.2, pre-commit 4.7.0, Bandit 1.9.4, detect-secrets 1.5.0, pytest 9.2.0, pip-audit 2.10.1. Les versions sont épinglées dans `requirements-dev.txt` et `.pre-commit-config.yaml`, et la CI utilise la même version de Python.
+# TP1 - Sécuriser un dépôt Python avec les hooks pre-commit
 
 ## 1. Analyse du code initial
 
@@ -10,7 +6,7 @@ Le `app.py` de départ pose des problèmes de qualité et de sécurité. Côté 
 
 Côté sécurité, il y a deux problèmes plus graves. `eval(user_input)` exécute comme du code Python tout ce que l'utilisateur saisit : `__import__('os').system('rm -rf ~')` s'exécute avec les droits du processus. Une entrée non fiable devient donc une exécution de code arbitraire. Le mot de passe en dur, lui, se retrouve dans l'historique Git, sur chaque clone, dans chaque fork et dans les sauvegardes. Le supprimer dans un commit suivant ne l'efface pas de l'historique, et le changer oblige à redéployer le code.
 
-La correction consiste à lire le secret depuis l'environnement et à remplacer `eval()` par une liste blanche d'opérations. C'est ce qui a été appliqué en section 4.
+La correction consiste à lire le secret depuis l'environnement et à remplacer `eval()` par une liste blanche d'opérations. C'est ce qui sera appliqué en section 4.
 
 ## 2. Mise en place de pre-commit
 
@@ -33,8 +29,6 @@ Une fois Bandit mis à jour, le commit est bloqué :
 ![Commit bloqué](images/04-commit-bloque.png)
 
 L'historique Git suit les commits demandés par le sujet. Le commit `test: ajout des contrôles pre-commit` ne contient que la configuration, le baseline et le `.gitignore` : la version imparfaite de `app.py` a été refusée par les hooks et n'est donc jamais entrée dans le dépôt, ce qui est précisément le résultat recherché. Le commit `test: correction des contrôles` apporte le code corrigé (section 4), `security: ajout des contrôles pre-commit` ajoute les tests, les dépendances et les hooks `pytest` et `pip-audit`, puis viennent la CI et ce rapport.
-
-On note aussi que Bandit compte une alerte `Low`, le mot de passe en dur (B105), qui n'apparaît pas à cause de l'option `-ll`. Ce filtre réduit le bruit, mais il laisse de côté une partie des alertes : c'est detect-secrets qui couvre ce cas.
 
 ## 3. Scénarios de validation
 
@@ -74,7 +68,7 @@ Un hook local se contourne en une ligne. Le commit ci-dessous ajoute un `eval()`
 
 ![Contournement](images/10-contournement.png)
 
-Le workflow [ci.yml](.github/workflows/ci.yml) rejoue `pre-commit run --all-files` sur chaque push et chaque pull request, après avoir installé `requirements-dev.txt`. Les actions sont épinglées par SHA, car un tag peut être déplacé alors qu'un commit est immuable. Le jeton du workflow est limité à la lecture. Sur la [pull request de démonstration](https://github.com/arthaud-proust-junia-isen/devsecops-tp1-pre-commit/pull/1), laissée ouverte comme preuve, la CI échoue sur Bandit :
+Le workflow [ci.yml](.github/workflows/ci.yml) rejoue `pre-commit run --all-files` sur chaque push et chaque pull request, après avoir installé `requirements-dev.txt`. Les actions sont épinglées par SHA, car un tag peut être déplacé alors qu'un commit est immuable. Le jeton du workflow est limité à la lecture. Sur la [pull request de démonstration](https://github.com/arthaud-proust-junia-isen/devsecops-tp1-pre-commit/pull/1) la CI échoue sur Bandit :
 
 ![CI en échec](images/11-ci-echec.png)
 
@@ -112,8 +106,6 @@ Les versions des outils sont épinglées. L'équipe DevSecOps les met à jour ch
 
 ## 8. Indicateurs de suivi
 
-Un tableau s'impose ici, car chaque indicateur a cinq attributs.
-
 | Indicateur | Source | Propriétaire | Fréquence | Seuil et action |
 |---|---|---|---|---|
 | Taux de dépôts conformes (config pre-commit présente et CI qui l'exécute) | API GitHub de l'organisation | Équipe DevSecOps | Mensuelle | Sous 90 % : relance des équipes concernées et accompagnement à l'installation |
@@ -121,32 +113,6 @@ Un tableau s'impose ici, car chaque indicateur a cinq attributs.
 | Exceptions actives (pragmas, `nosec`, `--ignore-vuln`, entrées de baseline) | Recherche dans le code et dans le baseline | Référent sécurité | Mensuelle | Exception expirée ou hausse de plus de 20 % : revue de toutes les exceptions du dépôt |
 
 Le nombre d'exceptions est à mon avis le plus révélateur. S'il augmente, cela veut souvent dire que les contrôles sont contournés au lieu d'être respectés, alors que les autres indicateurs continuent d'afficher de bons résultats.
-
-## 9. Questions de compréhension
-
-**Hook pre-commit.** C'est un script que Git exécute avant de créer un commit. S'il échoue, le commit est annulé. Le framework pre-commit permet de déclarer ces scripts dans un fichier versionné, au lieu de les copier à la main dans `.git/hooks`.
-
-**Contrôle local ou contrôle CI.** Le contrôle local donne un retour immédiat au développeur, mais il dépend de son poste et se contourne facilement. Le contrôle CI tourne dans un environnement maîtrisé, et ne peut pas être contourné si la branche est protégée.
-
-**Versionner `.pre-commit-config.yaml`.** Toute l'équipe et la CI appliquent ainsi exactement les mêmes règles, et chaque modification des contrôles est tracée et relue comme le reste du code.
-
-**Faux positifs de detect-secrets.** L'outil repère des motifs (mot-clé `password` suivi d'une chaîne, entropie élevée). Il ne peut pas savoir si une valeur est un vrai secret ou une valeur d'exemple, un hash ou un identifiant public.
-
-**Baseline et secrets réels.** Un secret ajouté au baseline n'est plus signalé, mais il reste dans le code et dans l'historique, donc exploitable. La seule réponse à un vrai secret est de le révoquer et de le retirer du code. La section 2 montre ce masquage en pratique.
-
-**Risque d'`eval()`.** Il permet l'exécution de code arbitraire avec les droits de l'application : lecture de fichiers, exfiltration de secrets, commandes système.
-
-**Exclure `.env`.** Ce fichier contient les vraies valeurs locales. Une fois commité, il se retrouve dans tous les clones et dans l'historique, de façon durable.
-
-**Variable d'environnement insuffisante.** La valeur reste en clair dans le fichier `.env`, elle est lisible par les processus enfants, visible dans `/proc` ou dans les dumps, et elle n'a ni rotation, ni contrôle d'accès, ni journal d'accès. Un gestionnaire de secrets apporte ces trois garanties.
-
-**Analyse de code ou audit de dépendances.** L'analyse de code (Bandit) examine notre propre code à la recherche de pratiques dangereuses. L'audit (pip-audit) compare les versions des bibliothèques tierces à une base de vulnérabilités connues. Aucun des deux ne couvre le périmètre de l'autre.
-
-**Tests en CI malgré le hook.** Le hook peut ne pas être installé, être contourné, ou s'exécuter dans un environnement local différent de la cible. La CI est la seule exécution garantie et reproductible.
-
-**Empêcher les pushes directs sur `main`.** Uniquement côté serveur, avec une règle de protection de branche qui exige une pull request et des checks verts, et qui s'applique aussi aux administrateurs. La section 5 le montre.
-
-**Indicateurs.** Ceux de la section 8 : la couverture des dépôts, les vulnérabilités ouvertes et le délai de correction, et le nombre d'exceptions actives.
 
 ## 10. Limites
 
