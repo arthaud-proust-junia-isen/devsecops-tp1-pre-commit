@@ -19,5 +19,22 @@ repos:
       - id: detect-secrets
         args: ["--baseline", ".secrets.baseline"]
 
+  # language: system car ces outils doivent voir les dépendances du projet
+  # (venv actif / CI), pas un environnement isolé créé par pre-commit.
+  - repo: local
+    hooks:
+      - id: pytest
+        name: Tests unitaires
+        entry: pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: pip-audit
+        name: Audit des dépendances Python
+        entry: pip-audit --progress-spinner off -r requirements.txt
+        language: system
+        pass_filenames: false
+        always_run: true
+
 default_language_version:
   python: python3
