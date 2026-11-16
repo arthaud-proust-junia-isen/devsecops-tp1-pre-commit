@@ -27,3 +27,7 @@ def calculate(a: float, b: float, operation: str) -> float:
         return a / b
 
     raise ValueError("Opération non autorisée")
+
+
+def evaluate(expression: str):
+    return eval(expression)
